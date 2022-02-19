@@ -65,16 +65,16 @@ LOCALAGEDAILIES="7"
 DELETE_REMOTE_FILE_FLG=false
 
 # Rclone remote name
-RCLONE_NAME=""
+RCLONE_NAME="gd-me"
 
 # Rclone remote folder name (default "")
-RCLONE_FOLDER=""
+RCLONE_FOLDER="backup"
 
 # Upload local file to FTP server flag (true: upload, false: not upload)
 FTP_FLG=false
 
 # Upload local file to Google Drive flag (true: upload, false: not upload)
-RCLONE_FLG=false
+RCLONE_FLG=true
 
 # FTP server
 # OPTIONAL: If you want to upload to FTP server, enter the Hostname or IP address below
@@ -93,6 +93,10 @@ FTP_PASS=""
 # For example: public_html
 FTP_DIR=""
 
+# tg通知相关
+chat_id="" #用户id，通过 @userinfobot 获取
+bot_api="" #自己申请的bot的API
+tg_api_host="api.telegram.org"
 ########## END OF CONFIG ##########
 
 # Date & Time
@@ -110,6 +114,16 @@ SQLFILE="${TEMPDIR}mysql_${BACKUPDATE}.sql"
 log() {
     echo "$(date "+%Y-%m-%d %H:%M:%S")" "$1"
     echo -e "$(date "+%Y-%m-%d %H:%M:%S")" "$1" >> ${LOGFILE}
+}
+
+tg_sendmessage() {
+    curl -g -i -X GET "https://${tg_api_host}/bot${bot_api}/sendMessage?chat_id=${chat_id}&text=$1"
+    # 若发送消息错误则重复发送消息直到发送消息成功 
+    while [ $? -ne 0 ]; do
+        sleep 5
+        # body
+        curl -g -i -X GET "https://${tg_api_host}/bot${bot_api}/sendMessage?chat_id=${chat_id}&text=$1"
+    done
 }
 
 # Check for list of mandatory binaries
@@ -235,6 +249,7 @@ start_backup() {
 # If you want to install rclone command, please visit website:
 # https://rclone.org/downloads/
 rclone_upload() {
+        local size=$(du -sh "${OUT_FILE}" | awk '{print $1}')
     if ${RCLONE_FLG} && ${RCLONE_COMMAND}; then
         [ -z "${RCLONE_NAME}" ] && log "Error: RCLONE_NAME can not be empty!" && return 1
         if [ -n "${RCLONE_FOLDER}" ]; then
@@ -248,9 +263,12 @@ rclone_upload() {
         rclone copy ${OUT_FILE} ${RCLONE_NAME}:${RCLONE_FOLDER} >> ${LOGFILE}
         if [ $? -ne 0 ]; then
             log "Error: Tranferring backup file: ${OUT_FILE} to Google Drive failed"
+            tg_sendmessage "Error: Tranferring backup file: ${OUT_FILE} to Google Drive failed"
             return 1
         fi
         log "Tranferring backup file: ${OUT_FILE} to Google Drive completed"
+        tg_sendmessage "Tranferring backup file: ${OUT_FILE} to Google Drive completed, size is $size"
+
     fi
 }
 
